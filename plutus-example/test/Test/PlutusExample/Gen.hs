@@ -2,27 +2,27 @@
 
 module Test.PlutusExample.Gen where
 
-import Cardano.Api
-import Cardano.Api.Shelley
-import Prelude
+import           Cardano.Api
+import           Cardano.Api.Shelley
+import           Prelude
 
-import Data.Map.Strict qualified as Map
+import qualified Data.Map.Strict                    as Map
 
-import Cardano.Ledger.Alonzo.Tx qualified as Alonzo
-import Cardano.Ledger.Alonzo.TxInfo qualified as Alonzo
-import Cardano.Ledger.Crypto (StandardCrypto)
-import Cardano.Ledger.Era qualified as Ledger
-import Cardano.Ledger.Shelley.UTxO qualified as Ledger
-import Cardano.Ledger.TxIn qualified as Ledger
-import Gen.Cardano.Api.Typed
-import Ledger qualified as Plutus
-import Plutus.V1.Ledger.Tx qualified as PV1
-import PlutusExample.PlutusVersion1.RedeemerContextScripts
-import PlutusExample.ScriptContextChecker
+import qualified Cardano.Ledger.Alonzo.Tx           as Alonzo
+import qualified Cardano.Ledger.Alonzo.TxInfo       as Alonzo
+import           Cardano.Ledger.Crypto              (StandardCrypto)
+import qualified Cardano.Ledger.Era                 as Ledger
+import qualified Cardano.Ledger.Shelley.UTxO        as Ledger
+import qualified Cardano.Ledger.TxIn                as Ledger
+import           Gen.Cardano.Api.Typed
+import qualified Ledger                             as Plutus
+import qualified Plutus.V1.Ledger.Tx                as PV1
+-- import PlutusExample.PlutusVersion1.RedeemerContextScripts
+import           PlutusExample.ScriptContextChecker
 
-import Hedgehog (Gen)
-import Hedgehog.Gen qualified as Gen
-import Hedgehog.Range qualified as Range
+import           Hedgehog                           (Gen)
+import qualified Hedgehog.Gen                       as Gen
+import qualified Hedgehog.Range                     as Range
 
 genPlutusTxOut :: Gen PV1.TxOut
 genPlutusTxOut = do

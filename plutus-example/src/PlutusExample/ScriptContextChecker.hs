@@ -1,14 +1,12 @@
 {-# LANGUAGE DataKinds           #-}
-{-# LANGUAGE EmptyCase           #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE TypeOperators       #-}
 
 
 
@@ -143,9 +141,31 @@ customRedeemerConstraints AlonzoEraOnwardsBabbage f = f
 customRedeemerConstraints AlonzoEraOnwardsConway f  = f
 
 
+customRedeemerCreationConstraints
+  :: AlonzoEraOnwards era
+  -> (( Ledger.EraTx (Api.ShelleyLedgerEra era)
+     , Ledger.EraPlutusTxInfo Ledger.PlutusV1 (Api.ShelleyLedgerEra era)
+     --, Ledger.BabbageEraTxBody (Api.ShelleyLedgerEra era)
+     , Ledger.AlonzoEraTxWits (Api.ShelleyLedgerEra era)
+   --  , Ledger.Inject (Ledger.AlonzoContextError (Ledger.AlonzoContextError (Api.ShelleyLedgerEra era))) Text
+    -- , Ledger.Inject Coin V2.Value
+     ) => a)
+  -> a
+customRedeemerCreationConstraints AlonzoEraOnwardsAlonzo f  = f
+customRedeemerCreationConstraints AlonzoEraOnwardsBabbage f = f
+customRedeemerCreationConstraints AlonzoEraOnwardsConway f  = f
+
+
 
 createAnyCustomRedeemer
-  :: Ledger.EraTxBody (Api.ShelleyLedgerEra era)
+  :: Ledger.EraTx (Api.ShelleyLedgerEra era)
+  => Ledger.EraPlutusTxInfo Ledger.PlutusV1 (Api.ShelleyLedgerEra era)
+  => Ledger.BabbageEraTxBody (Api.ShelleyLedgerEra era)
+  => Ledger.AlonzoEraTxWits (Api.ShelleyLedgerEra era)
+  => Ledger.Inject (Ledger.AlonzoContextError (Api.ShelleyLedgerEra era)) Text
+  => Ledger.Inject Coin V2.Value
+  => Ledger.Inject (Ledger.BabbageContextError (Alonzo.AlonzoEra StandardCrypto))
+                   (Ledger.AlonzoContextError (Alonzo.AlonzoEra StandardCrypto))
   => ShelleyBasedEra era
   -> Ledger.PParams (Api.ShelleyLedgerEra era)
   -> UTxO era
@@ -230,27 +250,32 @@ seqToList (x Seq.:<| rest) = x : seqToList rest
 seqToList Seq.Empty        = []
 
 toTxRedeemersV2
-  :: Ledger.EraTx (Api.ShelleyLedgerEra era)
+  :: Ledger.EraPlutusTxInfo Ledger.PlutusV2 (Api.ShelleyLedgerEra era)
+  => Ledger.AlonzoEraTxBody (Api.ShelleyLedgerEra era)
+  => Ledger.EraTx (Api.ShelleyLedgerEra era)
+  => Ledger.AlonzoEraTxWits (Api.ShelleyLedgerEra era)
+  => Ledger.Inject (Ledger.BabbageContextError (Api.ShelleyLedgerEra era))
+                   (Ledger.ContextError (Api.ShelleyLedgerEra era))
   => Ledger.Tx (Api.ShelleyLedgerEra era)
   -> Either (Ledger.ContextError (Api.ShelleyLedgerEra era)) (PV2.Map V2.ScriptPurpose PV2.Redeemer)
 toTxRedeemersV2 = Ledger.transTxRedeemers (Proxy :: Proxy Ledger.PlutusV2)
 
 toScriptPurposeV1
-  :: Ledger.EraPlutusContext (Api.ShelleyLedgerEra era)
+  :: Ledger.EraPlutusTxInfo Ledger.PlutusV1 (Api.ShelleyLedgerEra era)
   => Ledger.PlutusPurpose Ledger.AsItem (Api.ShelleyLedgerEra era)
   -> Either (ScriptContextError era) V1.ScriptPurpose
 toScriptPurposeV1 p =
   first ScriptPurposeRelated $ Ledger.toPlutusScriptPurpose (Proxy :: Proxy Ledger.PlutusV1) p
 
 toScriptPurposeV2
-  :: Ledger.EraPlutusContext (Api.ShelleyLedgerEra era)
+  :: Ledger.EraPlutusTxInfo Ledger.PlutusV2 (Api.ShelleyLedgerEra era)
   => Ledger.PlutusPurpose Ledger.AsItem (Api.ShelleyLedgerEra era)
   -> Either (ScriptContextError era) V2.ScriptPurpose
 toScriptPurposeV2 p =
   first ScriptPurposeRelated $ Ledger.toPlutusScriptPurpose (Proxy :: Proxy Ledger.PlutusV2) p
 
 toPlutusCertsV1V2
- :: Ledger.ShelleyEraTxCert (Api.ShelleyLedgerEra era)
+ :: Ledger.EraPlutusTxInfo Ledger.PlutusV1 (Api.ShelleyLedgerEra era)
  => Ledger.TxCert (Api.ShelleyLedgerEra era)
  -> Either (Ledger.ContextError (Api.ShelleyLedgerEra era)) PV1.DCert
 toPlutusCertsV1V2 = Ledger.toPlutusTxCert (Proxy :: Proxy Ledger.PlutusV1)
@@ -263,19 +288,36 @@ cardanoNodePParams = CardanoModeParams $ EpochSlots defaultByronEpochSlots
 defaultByronEpochSlots :: Word64
 defaultByronEpochSlots = 21600
 
+data AnyScriptContextEra where
 
+  AnyScriptContextEra :: ScriptContextError era -> AnyScriptContextEra
+
+-- TODO: Left off here. You need to specify the era of the transaction you are reading
 createAnyCustomRedeemerFromTxFp
-  :: ShelleyBasedEra era
+  :: SocketPath
+  -> FilePath
+  -> NetworkId
+  -> ExceptT AnyScriptContextEra IO AnyCustomRedeemer
+createAnyCustomRedeemerFromTxFp  spath  fp network = do
+
+  txFp <- liftIO $ fileOrPipe fp
+  InAnyShelleyBasedEra sbe tx <- firstExceptT (AnyScriptContextEra . ReadTxBodyError)
+                                           . newExceptT
+                                           $ readFileTx txFp
+  undefined
+  --firstExceptT AnyScriptContextEra
+  --  $ shelleyBasedEraConstraints sbe
+  --      (createAnyCustomRedeemerFromTx sbe spath tx fp network)
+
+createAnyCustomRedeemerFromTx
+  :: Ledger.EraTxBody (Api.ShelleyLedgerEra era)
+  => ShelleyBasedEra era
   -> SocketPath
   -> Api.Tx era
   -> FilePath
   -> NetworkId
   -> ExceptT (ScriptContextError era) IO AnyCustomRedeemer
-createAnyCustomRedeemerFromTxFp sbe spath tx fp network = do
- -- txFp <- liftIO $ fileOrPipe fp
- -- InAnyShelleyBasedEra sbe tx <- firstExceptT ReadTxBodyError
- --                                          . newExceptT
- --                                          $ readFileTx txFp
+createAnyCustomRedeemerFromTx sbe spath tx fp network = do
 
 ---
   let localNodeConnInfo = LocalNodeConnectInfo cardanoNodePParams network spath
@@ -292,13 +334,14 @@ createAnyCustomRedeemerFromTxFp sbe spath tx fp network = do
                utxo <- lift (queryUtxo sbe QueryUTxOWhole)
                          & onLeft (left . QueryFailure)
                          & onLeft (left . QueryFailureEra)
-               hoistEither $ createAnyCustomRedeemer
-                                     sbe
-                                     pparams
-                                     utxo
-                                     eInfo
-                                     sStart
-                                     tx
+               undefined
+               --hoistEither $ createAnyCustomRedeemer
+               --                      sbe
+               --                      pparams
+               --                      utxo
+               --                      eInfo
+               --                      sStart
+               --                      tx
 
   hoistEither res
 
@@ -310,42 +353,42 @@ createAnyCustomRedeemerFromTxFp sbe spath tx fp network = do
 
 
 
-createAnyCustomRedeemerBsFromTxFp
-  :: PlutusScriptVersion lang
-  -> FilePath
-  -> NetworkId
-  -> ExceptT (ScriptContextError era) IO LB.ByteString
-createAnyCustomRedeemerBsFromTxFp pScriptVer txFp  nid = do
-  anyCustomRedeemer <- createAnyCustomRedeemerFromTxFp pScriptVer txFp anyCmodeParams nid
-  return . Aeson.encode . scriptDataToJson ScriptDataJsonDetailedSchema
-         $ customRedeemerToScriptData anyCustomRedeemer
+--createAnyCustomRedeemerBsFromTxFp
+--  :: PlutusScriptVersion lang
+--  -> FilePath
+--  -> NetworkId
+--  -> ExceptT (ScriptContextError era) IO LB.ByteString
+--createAnyCustomRedeemerBsFromTxFp pScriptVer txFp  nid = do
+--  anyCustomRedeemer <- createAnyCustomRedeemerFromTxFp pScriptVer txFp anyCmodeParams nid
+--  return . Aeson.encode . scriptDataToJson ScriptDataJsonDetailedSchema
+--         $ customRedeemerToScriptData anyCustomRedeemer
 
 
 -- Used in roundtrip testing
 
-fromPlutusTxId :: V1.TxId -> Ledger.TxId StandardCrypto
-fromPlutusTxId (V1.TxId builtInBs) =
-  case deserialiseFromRawBytes AsTxId $ fromBuiltin builtInBs of
-    Just txidHash -> toShelleyTxId txidHash
-    Nothing       -> Prelude.error "Could not derserialize txid"
+--fromPlutusTxId :: V1.TxId -> Ledger.TxId StandardCrypto
+--fromPlutusTxId (V1.TxId builtInBs) =
+--  case deserialiseFromRawBytes AsTxId $ fromBuiltin builtInBs of
+--    Just txidHash -> toShelleyTxId txidHash
+--    Nothing       -> Prelude.error "Could not derserialize txid"
 
 
-sampleTestV1ScriptContextDataJSON :: LB.ByteString
-sampleTestV1ScriptContextDataJSON =
-  Aeson.encode
-    . scriptDataToJson ScriptDataJsonDetailedSchema
-    . customRedeemerToScriptData
-    . AnyPV1CustomRedeemer
-    $ PV1CustomRedeemer
-        dummyTxOuts
-        dummyTxIns
-        dummyLedgerVal
-        dummyPOSIXTimeRange
-        dummyLedgerVal
-        dummyDatumHashes
-        dummyCerts
-        dummySignatories
-        dummyScriptPurpose
+--sampleTestV1ScriptContextDataJSON :: LB.ByteString
+--sampleTestV1ScriptContextDataJSON =
+--  Aeson.encode
+--    . scriptDataToJson ScriptDataJsonDetailedSchema
+--    . customRedeemerToScriptData
+--    . AnyPV1CustomRedeemer
+--    $ PV1CustomRedeemer
+--        dummyTxOuts
+--        dummyTxIns
+--        dummyLedgerVal
+--        dummyPOSIXTimeRange
+--        dummyLedgerVal
+--        dummyDatumHashes
+--        dummyCerts
+--        dummySignatories
+--        dummyScriptPurpose
 
 
 dummyCerts :: [V1.DCert]
@@ -361,7 +404,7 @@ dummyDatumHashes :: [(V1.DatumHash, V1.Datum)]
 dummyDatumHashes = []
 
 dummyLedgerVal :: V1.Value
-dummyLedgerVal = Alonzo.transValue $ toMaryValue Prelude.mempty
+dummyLedgerVal = undefined -- Alonzo.transValue $ toMaryValue Prelude.mempty
 
 dummyTxOuts :: [V1.TxOut]
 dummyTxOuts = []
@@ -386,23 +429,23 @@ getTxInInfoFromTxIn sbe p pparams (Shelley.UTxO utxoMap) txIn = do
     Nothing -> undefined
     Just txOut -> Ledger.toPlutusTxInfo p pparams undefined undefined undefined undefined
 
-sampleTestV2ScriptContextDataJSON :: LB.ByteString
-sampleTestV2ScriptContextDataJSON =
-  Aeson.encode
-    . scriptDataToJson ScriptDataJsonDetailedSchema
-    . customRedeemerToScriptData
-    . AnyPV2CustomRedeemer
-    $ PV2CustomRedeemer
-       { pv2Inputs = []
-       , pv2RefInputs = []
-       , pv2Outputs = []
-       , pv2Fee = PPrelude.mempty
-       , pv2Mint = PPrelude.mempty
-       , pv2DCert = []
-       , pv2Wdrl = PMap.empty
-       , pv2ValidRange = V2.always
-       , pv2Signatories = []
-       , pv2Redeemers = PMap.empty
-       , pv2Data = PMap.empty
-       , pv2ScriptPurpose = Nothing
-       }
+--sampleTestV2ScriptContextDataJSON :: LB.ByteString
+--sampleTestV2ScriptContextDataJSON =
+--  Aeson.encode
+--    . scriptDataToJson ScriptDataJsonDetailedSchema
+--    . customRedeemerToScriptData
+--    . AnyPV2CustomRedeemer
+--    $ PV2CustomRedeemer
+--       { pv2Inputs = []
+--       , pv2RefInputs = []
+--       , pv2Outputs = []
+--       , pv2Fee = PPrelude.mempty
+--       , pv2Mint = PPrelude.mempty
+--       , pv2DCert = []
+--       , pv2Wdrl = PMap.empty
+--       , pv2ValidRange = V2.always
+--       , pv2Signatories = []
+--       , pv2Redeemers = PMap.empty
+--       , pv2Data = PMap.empty
+--       , pv2ScriptPurpose = Nothing
+--       }

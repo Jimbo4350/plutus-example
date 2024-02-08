@@ -2,19 +2,20 @@
 
 module Test.PlutusExample.ScriptData where
 
-import Cardano.Prelude
+import           Cardano.Prelude
 
-import Cardano.Api
+import           Cardano.Api
 
-import Data.Aeson qualified as Aeson
+import qualified Data.Aeson                         as Aeson
 
-import Hedgehog (Property, forAll, property, tripping, (===))
-import Hedgehog.Internal.Property (failWith)
+import           Hedgehog                           (Property, forAll, property,
+                                                     tripping, (===))
+import           Hedgehog.Internal.Property         (failWith)
 
-import PlutusExample.PlutusVersion1.RedeemerContextScripts
-import PlutusExample.ScriptContextChecker
+-- import PlutusExample.PlutusVersion1.RedeemerContextScripts
+import           PlutusExample.ScriptContextChecker
 
-import Test.PlutusExample.Gen
+import           Test.PlutusExample.Gen
 
 prop_ScriptData_MyCustomRedeemer :: Property
 prop_ScriptData_MyCustomRedeemer =
