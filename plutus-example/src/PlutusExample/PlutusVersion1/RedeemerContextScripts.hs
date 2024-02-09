@@ -1,10 +1,10 @@
-{-# LANGUAGE DataKinds             #-}
-{-# LANGUAGE ImportQualifiedPost   #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE Strict                #-}
-{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE Strict #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 {-# OPTIONS_GHC -fno-ignore-interface-pragmas #-}
 {-# OPTIONS_GHC -fno-omit-interface-pragmas #-}
@@ -22,27 +22,26 @@
 
 module PlutusExample.PlutusVersion1.RedeemerContextScripts
   ( PV1CustomRedeemer(..)
- -- , pv1CustomRedeemerFromScriptData
+  , compiledValidator
+  -- , pv1RedeemerContextTestScriptBs
+  --, pv1CustomRedeemerFromScriptData
  -- , scriptContextTestMintingScript
-  -- , scriptContextTextPayingScript
+  , scriptContextTextPayingScript
   ) where
-
-import           Prelude                hiding (($))
 
 import           Cardano.Api
 import           Cardano.Api.Shelley
 
-import           Codec.Serialise
-import qualified Data.ByteString.Lazy   as LB
-import qualified Data.ByteString.Short  as SBS
-
 import qualified PlutusLedgerApi.Common as PV1
-import           PlutusLedgerApi.V1     as Plutus
+import           PlutusLedgerApi.V1 as Plutus
+
+import           Prelude hiding (($))
+
 import qualified PlutusTx
-import qualified PlutusTx.AssocMap      as AMap
-import           PlutusTx.Prelude       hiding (Semigroup (..), unless, (.))
-import qualified PlutusTx.Prelude       as P
-import qualified PlutusTx.Prelude       as PlutusTx
+import qualified PlutusTx.AssocMap as AMap
+import           PlutusTx.Prelude hiding (Semigroup (..), unless, (.))
+import qualified PlutusTx.Prelude as P
+import qualified PlutusTx.Prelude as PlutusTx
 
 -- Description
 -- PV1CustomRedeemer mimics the ScriptContext. PV1CustomRedeemer is built via reading
@@ -140,7 +139,7 @@ compiledValidator = $$(PlutusTx.compile [|| validator ||])
 --
 pv1RedeemerContextTestScriptBs :: SerialisedScript
 pv1RedeemerContextTestScriptBs = PV1.serialiseCompiledCode compiledValidator
---
+
 scriptContextTextPayingScript :: PlutusScript PlutusScriptV1
 scriptContextTextPayingScript = PlutusScriptSerialised pv1RedeemerContextTestScriptBs
 
@@ -192,10 +191,10 @@ scriptContextTextPayingScript = PlutusScriptSerialised pv1RedeemerContextTestScr
 --
 ---- Helpers
 --
---pv1CustomRedeemerFromScriptData :: ScriptData -> Either String PV1CustomRedeemer
---pv1CustomRedeemerFromScriptData sDat =
---  let bIData = PlutusTx.dataToBuiltinData $ toPlutusData sDat
---  in case PlutusTx.fromBuiltinData bIData of
---      Just mCRedeem -> Right mCRedeem
---      Nothing       -> Left "Could not decode PV1CustomRedeemer from ScriptData"
---
+pv1CustomRedeemerFromScriptData :: ScriptData -> Either String PV1CustomRedeemer
+pv1CustomRedeemerFromScriptData sDat =
+  let bIData = PlutusTx.dataToBuiltinData $ toPlutusData sDat
+  in case PlutusTx.fromBuiltinData bIData of
+      Just mCRedeem -> Right mCRedeem
+      Nothing       -> Left "Could not decode PV1CustomRedeemer from ScriptData"
+
